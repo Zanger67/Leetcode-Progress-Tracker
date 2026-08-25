@@ -61,23 +61,37 @@ runs:
               python -m pip install --upgrade pip
               pip install -r '.readme_updater/requirements.txt'
 
-        - name: Execute the markdown generation python script
+        - name: Generate the markdown files and commit them to the repo
           shell: bash
           # -n: ignores previous .pkl stores of the modified dates (regenerate all from scratch)
           # -g: use github log history to determine creation and modification dates of files
           # -user: specify the username for the LeetCode account
-          run: python '.readme_updater/main.py' -n -g -user "${{ inputs.username }}" -contest-dir "${{ inputs['contest-dir'] }}"
-
-          # Note: exit 0 should be redundant since this action triggers on a modification meaning
-          #       at least one file edit, but might as well keep it in case of future changes
+          #
+          # Note: exit 0 on the commit should be redundant since this action triggers on a
+          #       modification meaning at least one file edit, but might as well keep it in
+          #       case of future changes
           #
           #       Only exception I can think of is if you make a change in one commit
           #       then revert it in the next
-        - name: Commit updated markdown files to repo
-          shell: bash
           run: |
               git config --global user.name "Zanger67/leetcode"
               git config --global user.email "Zanger67[bot]@Zanger67.github.io"
-              git add -- . ':!.readme_updater'
-              git commit -m 'Updated markdown files' || exit 0
-              git push
+
+              for attempt in 1 2 3; do
+                  python '.readme_updater/main.py' -n -g -user "${{ inputs.username }}" -contest-dir "${{ inputs['contest-dir'] }}"
+
+                  git add -- . ':!.readme_updater'
+                  git commit -m 'Updated markdown files' || exit 0
+
+                  if git push; then
+                      exit 0
+                  fi
+
+                  echo "Push rejected on attempt $attempt/3 - another run of this action pushed first."
+                  echo "Re-syncing to origin/${{ github.ref_name }} and regenerating from the updated tree..."
+                  git fetch origin '${{ github.ref_name }}'
+                  git reset --hard 'origin/${{ github.ref_name }}'
+              done
+
+              echo "::error::Failed to push the generated markdown after 3 attempts."
+              exit 1
