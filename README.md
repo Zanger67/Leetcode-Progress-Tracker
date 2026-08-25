@@ -41,6 +41,13 @@ on:
 permissions:
     contents: write
 
+# Solutions synced by a browser extension normally arrive as a few commits in a
+# row, and each push starts its own run. This keeps only the newest run alive so
+# that they don't race each other to push their generated markdown.
+concurrency:
+    group: wikileet-${{ github.ref }}
+    cancel-in-progress: true
+
 jobs:
     build:
         runs-on: ubuntu-latest
@@ -52,6 +59,11 @@ jobs:
                 # Insert your LeetCode username here!
                 username: Zanger
 ```
+
+The `concurrency` block is optional. Without it, several runs can be in flight at
+once and only the first to finish gets to push; the rest re-sync and regenerate
+before retrying, which works but burns runner minutes on output that the newest
+run is about to redo anyway.
 
 <!-- Insert gif of it running and creating all the markdowns -->
 
